@@ -29,13 +29,14 @@ function formatDuration(mins, format) {
 }
 
 function injectDuration(options) {
-  document.querySelectorAll('div[role="button"]').forEach(eventEl => {
-    const container = eventEl.querySelector('div.fFwDnf');
-    if (!container || container.querySelector('.dbr-injected')) return;
+  document.querySelectorAll('div[role="button"]:not([data-dbr-processed])').forEach(eventEl => {
+    const timeDiv = eventEl.querySelector('.lhydbb.gVNoLb');
+    if (!timeDiv) return;
+    const container = timeDiv.parentElement;
+    if (container.querySelector('.dbr-injected')) return;
 
     // Detect the original time label to determine if it's a past event
-    const existingTimeDiv = container.querySelector('.lhydbb.gVNoLb');
-    const isPast = existingTimeDiv?.classList.contains('UflSff');
+    const isPast = timeDiv.classList.contains('UflSff');
 
     // Parse event text and calculate duration
     const fullText = eventEl.innerText;
@@ -49,12 +50,13 @@ function injectDuration(options) {
     div.textContent = label;
 
     container.appendChild(div);
+    eventEl.setAttribute('data-dbr-processed', '');
   });
 }
 
 function runInjection() {
   chrome.storage.sync.get(
-    { minimumDuration: 30, durationFormat: 'hourMinutes' },
+    { minimumDuration: 0, durationFormat: 'hourMinutes' },
     injectDuration
   );
 }

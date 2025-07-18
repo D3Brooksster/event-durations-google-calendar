@@ -1,8 +1,6 @@
 # Event Durations for Google Calendar
 
-This is a Google Chrome extension that shows event durations on Google Calendar.
-
-Calculates and displays event durations on Google Calendar events. Manage your time better and quickly create events with the desired duration.
+This Chrome extension calculates and displays the duration of every event. It now shows durations for all events by default, even very short ones, unless you choose a minimum length in the options page.
 
 [Install it via the Chrome Web Store](https://chrome.google.com/webstore/detail/event-durations-for-googl/elfoibhncineionfonglaickdliaikmj).
 
