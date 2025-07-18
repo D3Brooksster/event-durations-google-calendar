@@ -16,7 +16,7 @@ function saveOptions() {
 
 function restoreOptions() {
   chrome.storage.sync.get({
-    minimumDuration: 0,
+    minimumDuration: 61,
     durationFormat: 'hourMinutes',
   }, function(items) {
     document.getElementById('minimumDuration').value = items.minimumDuration;
