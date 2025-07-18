@@ -1,140 +1,71 @@
-MutationObserver = window.MutationObserver || window.WebKitMutationObserver;
+function parseDurationFromText(text) {
+  const match = text.match(/(\d{1,2})(?::(\d{2}))?\s*(am|pm)?\s*[-–to]+\s*(\d{1,2})(?::(\d{2}))?\s*(am|pm)?/i);
+  if (!match) return null;
 
-var minimumDurationMs = 60 * 60 * 1000;
-var durationFormat = 'hourMinutes';
+  let [, h1, m1 = '0', mer1, h2, m2 = '0', mer2] = match;
+  h1 = parseInt(h1); m1 = parseInt(m1);
+  h2 = parseInt(h2); m2 = parseInt(m2);
 
-chrome.storage.sync.get({
-  minimumDuration: 61,
-  durationFormat: 'hourMinutes',
-}, function (items) {
-  minimumDurationMs = parseInt(items.minimumDuration, 10) * 60 * 1000;
-  durationFormat = items.durationFormat;
-});
-
-var annotateOldCalendarEvents = function (rootEl) {
-  $(rootEl).find('.chip-caption').each(function () {
-    var eventTimeElement = $(this.parentNode);
-    var nextSibling = eventTimeElement.next();
-
-    if (eventTimeElement.hasClass('event-duration')) {
-      return;
+  const toMins = (h, m, mer) => {
+    if (mer) {
+      if (mer.toLowerCase() === 'pm' && h !== 12) h += 12;
+      if (mer.toLowerCase() === 'am' && h === 12) h = 0;
     }
+    return h * 60 + m;
+  };
 
-    if (nextSibling.hasClass('event-duration')) {
-      nextSibling.remove();
-    }
+  const start = toMins(h1, m1, mer1);
+  let end = toMins(h2, m2, mer2);
+  if (end < start) end += 24 * 60;
 
-    var eventTime = this.innerText;
-    var diff = calculateDiff(eventTime);
+  return end - start;
+}
 
-    if (diff >= minimumDurationMs) {
-      var duration = formatDiff(diff, durationFormat);
+function formatDuration(mins, format) {
+  if (format === 'minutes') return `${mins}m`;
+  const hours = Math.floor(mins / 60);
+  const minutes = mins % 60;
+  return hours ? `${hours}h${minutes ? ` ${minutes}m` : ''}` : `${minutes}m`;
+}
 
-      var durationElement = $('<dt class="event-duration"><span class="chip-caption">' + duration + '</span></dt>');
+function injectDuration(options) {
+  document.querySelectorAll('div[role="button"]').forEach(eventEl => {
+    const container = eventEl.querySelector('div.fFwDnf');
+    if (!container || container.querySelector('.dbr-injected')) return;
 
-      durationElement.insertAfter(eventTimeElement);
-    }
+    // Detect the original time label to determine if it's a past event
+    const existingTimeDiv = container.querySelector('.lhydbb.gVNoLb');
+    const isPast = existingTimeDiv?.classList.contains('UflSff');
+
+    // Parse event text and calculate duration
+    const fullText = eventEl.innerText;
+    const mins = parseDurationFromText(fullText);
+    if (!mins || mins < options.minimumDuration) return;
+
+    const label = formatDuration(mins, options.durationFormat);
+
+    const div = document.createElement('div');
+    div.className = `lhydbb gVNoLb EiZ8Dd${isPast ? ' UflSff' : ''} Gt6oUd dbr-injected`;
+    div.textContent = label;
+
+    container.appendChild(div);
   });
 }
 
-var annotateNewCalendarEvents = function (rootEl) {
-  $("[data-eventchip]").each(function () {
-    var eventChipElement = this;
-    if (eventChipElement.children.length <= 1) {
-      return;
-    }
-    var eventTimeElement = eventChipElement.querySelector('.gVNoLb');
+function runInjection() {
+  chrome.storage.sync.get(
+    { minimumDuration: 30, durationFormat: 'hourMinutes' },
+    injectDuration
+  );
+}
 
-    if (!eventTimeElement) {
-      return;
-    }
-
-    var nextSibling = $(eventTimeElement.nextElementSibling);
-    var eventMetadata = eventChipElement.querySelector('.ynRLnc').textContent;
-    var diff = calculateDiff(eventMetadata);
-
-    if (diff >= minimumDurationMs) {
-      var duration = formatDiff(diff, durationFormat);
-
-      if (nextSibling.hasClass('event-duration')) {
-        if (nextSibling[0].innerText === duration) {
-          return;
-        }
-
-        nextSibling[0].innerText = duration;
-      } else {
-        var durationElement = $(eventTimeElement).clone()
-          .addClass('event-duration')
-          .removeClass('gVNoLb')
-          .text(duration);
-
-        durationElement.insertAfter(eventTimeElement);
-      }
-    }
-  });
-};
-
-var calendarVersion;
-
-var injectDuration = function (mutation) {
-  switch (calendarVersion) {
-    case 'old':
-      annotateOldCalendarEvents(mutation.target);
-      break;
-
-    case 'new':
-      annotateNewCalendarEvents(mutation.target);
-      break;
-  }
-};
-
-var observer = new MutationObserver(function(mutations, observer) {
-  mutations.forEach(function (mutation) {
-    injectDuration(mutation);
-  });
+const observer = new MutationObserver(() => {
+  clearTimeout(window.__dbr_timeout);
+  window.__dbr_timeout = setTimeout(runInjection, 100);
 });
 
-var maxCheckAttempts = 100;
+observer.observe(document.body, { childList: true, subtree: true });
 
-var checkCalendarVersionInterval = setInterval(function () {
-  switch (calendarVersion) {
-    case 'old':
-      console.log('Event Durations detected old Google Calendar.');
-      observer.observe(document, {
-        subtree: true,
-        attributes: true,
-      });
-      clearInterval(checkCalendarVersionInterval);
-      annotateOldCalendarEvents(document);
-      break;
+window.addEventListener('load', runInjection);
 
-    case 'new':
-      console.log('Event Durations detected new Google Calendar.');
-      observer.observe(document, {
-        subtree: true,
-        childList: true,
-      });
-      clearInterval(checkCalendarVersionInterval);
-      annotateNewCalendarEvents(document);
-      break;
-
-    default:
-      if (maxCheckAttempts < 0) {
-        console.error('Error determining calendar version, please contact eventdurations@gmail.com.');
-        clearInterval(checkCalendarVersionInterval);
-        return;
-      }
-
-      maxCheckAttempts--;
-
-      var useNewCalendarButton = $('.goog-imageless-button-content:contains("Use new Calendar")');
-
-      if (useNewCalendarButton.length > 0) {
-        calendarVersion = 'old';
-      } else {
-        calendarVersion = 'new';
-      }
-      break;
-  }
-}, 100);
-
+console.log('[Event Duration] Injection running with correct class handling.');
