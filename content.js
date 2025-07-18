@@ -29,14 +29,11 @@ function formatDuration(mins, format) {
 }
 
 function injectDuration(options) {
-  document.querySelectorAll('div[role="button"]:not([data-dbr-processed])').forEach(eventEl => {
+  document.querySelectorAll('div[role="button"]').forEach(eventEl => {
     const timeDiv = eventEl.querySelector('.gVNoLb');
     if (!timeDiv) return;
     const container = timeDiv.parentElement;
     if (container.querySelector('.dbr-injected')) return;
-
-    // Detect the original time label to determine if it's a past event
-    const isPast = timeDiv.classList.contains('UflSff');
 
     // Parse event text and calculate duration
     const fullText = eventEl.getAttribute('aria-label') || eventEl.innerText;
@@ -50,15 +47,30 @@ function injectDuration(options) {
     div.textContent = label;
 
     container.appendChild(div);
-    eventEl.setAttribute('data-dbr-processed', '');
   });
 }
 
+let optionsCache = { minimumDuration: 61, durationFormat: 'hourMinutes' };
+
+function loadOptionsAndRun() {
+  chrome.storage.sync.get(optionsCache, items => {
+    optionsCache = items;
+    injectDuration(optionsCache);
+  });
+}
+
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area === 'sync') {
+    Object.assign(optionsCache, {
+      minimumDuration: changes.minimumDuration?.newValue ?? optionsCache.minimumDuration,
+      durationFormat: changes.durationFormat?.newValue ?? optionsCache.durationFormat,
+    });
+    injectDuration(optionsCache);
+  }
+});
+
 function runInjection() {
-  chrome.storage.sync.get(
-    { minimumDuration: 61, durationFormat: 'hourMinutes' },
-    injectDuration
-  );
+  injectDuration(optionsCache);
 }
 
 const observer = new MutationObserver(() => {
@@ -68,6 +80,6 @@ const observer = new MutationObserver(() => {
 
 observer.observe(document.body, { childList: true, subtree: true });
 
-window.addEventListener('load', runInjection);
+window.addEventListener('load', loadOptionsAndRun);
 
-console.log('[Event Duration] Injection running with correct class handling.');
+console.log('[Event Duration] Extension loaded and observing changes.');
