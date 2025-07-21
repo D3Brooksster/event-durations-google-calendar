@@ -53,21 +53,38 @@ function injectDuration(options) {
 let optionsCache = { minimumDuration: 61, durationFormat: 'hourMinutes' };
 
 function loadOptionsAndRun() {
-  chrome.storage.sync.get(optionsCache, items => {
-    optionsCache = items;
+  if (!chrome?.storage?.sync) {
+    console.error('[Event Duration] chrome.storage unavailable');
     injectDuration(optionsCache);
-  });
-}
-
-chrome.storage.onChanged.addListener((changes, area) => {
-  if (area === 'sync') {
-    Object.assign(optionsCache, {
-      minimumDuration: changes.minimumDuration?.newValue ?? optionsCache.minimumDuration,
-      durationFormat: changes.durationFormat?.newValue ?? optionsCache.durationFormat,
+    return;
+  }
+  try {
+    chrome.storage.sync.get(optionsCache, items => {
+      if (chrome.runtime.lastError) {
+        console.error('[Event Duration] Failed to load options:', chrome.runtime.lastError);
+        injectDuration(optionsCache);
+        return;
+      }
+      optionsCache = items;
+      injectDuration(optionsCache);
     });
+  } catch (e) {
+    console.error('[Event Duration] Error accessing chrome.storage:', e);
     injectDuration(optionsCache);
   }
-});
+}
+
+if (chrome?.storage?.onChanged) {
+  chrome.storage.onChanged.addListener((changes, area) => {
+    if (area === 'sync') {
+      Object.assign(optionsCache, {
+        minimumDuration: changes.minimumDuration?.newValue ?? optionsCache.minimumDuration,
+        durationFormat: changes.durationFormat?.newValue ?? optionsCache.durationFormat,
+      });
+      injectDuration(optionsCache);
+    }
+  });
+}
 
 function runInjection() {
   injectDuration(optionsCache);
